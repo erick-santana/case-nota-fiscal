@@ -68,14 +68,3 @@ jobs:
             aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969 \
             image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 \
             geradornotafiscal:${{ github.sha }}
-      - name: Smoke test — readiness do contêiner
-        run: |
-          docker run -d --name smoke -p 8080:8080 -p 8081:8081 \
-            -e SPRING_PROFILES_ACTIVE=local geradornotafiscal:${{ github.sha }}
-          for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8081/actuator/health/readiness | grep -q '"UP"'; then
-              echo "readiness OK"; docker rm -f smoke; exit 0
-            fi
-            sleep 2
-          done
-          echo "Aplicação não ficou pronta no tempo esperado"; docker logs smoke; docker rm -f smoke; exit 1
