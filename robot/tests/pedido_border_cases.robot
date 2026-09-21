@@ -14,12 +14,12 @@ Itens Com Exatamente Cinquenta Itens Retorna 200
     Should Be Equal As Numbers    ${resp.status_code}    200
     Length Should Be    ${resp.json()}[itens]    50
 
-Valor Unitario E Valor Total Itens Zero Retorna 200
-    [Documentation]    Borda inferior de @PositiveOrZero — um item de cortesia com valor zero é
-    ...                caso de negócio legítimo, não erro.
-    ${resp}=    Enviar Pedido Valido No Limite    valor_unitario_e_total_itens_zero.json
+Valor Unitario Zero Retorna 200
+    [Documentation]    Borda inferior de @PositiveOrZero em Item.valorUnitario — um item de
+    ...                cortesia com valor zero é caso de negócio legítimo, contanto que
+    ...                valor_total_itens permaneça positivo.
+    ${resp}=    Enviar Pedido Valido No Limite    valor_unitario_zero.json
     Should Be Equal As Numbers    ${resp.status_code}    200
-    Should Be Equal As Numbers    ${resp.json()}[valor_total_itens]    0
 
 Valor Frete Zero Retorna 200
     [Documentation]    Borda inferior de @PositiveOrZero em Pedido.valorFrete.

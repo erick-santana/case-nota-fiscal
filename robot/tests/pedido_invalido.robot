@@ -22,6 +22,11 @@ Valor Total Itens Negativo Retorna 400
     ${resp}=    Enviar Pedido Invalido    valor_total_itens_negativo.json
     Should Be Equal As Numbers    ${resp.status_code}    400
 
+Valor Total Itens Zero Retorna 400
+    [Documentation]    valor_total_itens não pode ser zero — só é aceito estritamente positivo.
+    ${resp}=    Enviar Pedido Invalido    valor_total_itens_zero.json
+    Should Be Equal As Numbers    ${resp.status_code}    400
+
 Valor Frete Negativo Retorna 400
     ${resp}=    Enviar Pedido Invalido    valor_frete_negativo.json
     Should Be Equal As Numbers    ${resp.status_code}    400

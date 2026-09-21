@@ -31,7 +31,7 @@ public class Pedido {
 
 	    @JsonProperty("valor_total_itens")
 	    @NotNull
-	    @PositiveOrZero
+	    @Positive
 	    private Double valorTotalItens;
 
 	    @JsonProperty("valor_frete")

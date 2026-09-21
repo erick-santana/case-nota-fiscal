@@ -45,9 +45,13 @@ class BeanValidationTest {
     }
 
     @Test
-    void valorTotalItensNuloOuNegativoProduzViolacao() {
+    void valorTotalItensNuloZeroOuNegativoProduzViolacao() {
         Pedido pedido = umPedidoValido();
         pedido.setValorTotalItens(null);
+        assertThat(violacoesDoCampo(pedido, "valorTotalItens")).isNotEmpty();
+
+        pedido = umPedidoValido();
+        pedido.setValorTotalItens(0.0);
         assertThat(violacoesDoCampo(pedido, "valorTotalItens")).isNotEmpty();
 
         pedido = umPedidoValido();
