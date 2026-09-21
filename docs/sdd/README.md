@@ -8,14 +8,15 @@ Não há histórias, épicos, pontos ou ritos de backlog aqui. Há seis especifi
 
 ```
 docs/sdd/
-├── CONSTITUICAO.md     princípios invioláveis, decisões transversais D-01…D-06, restrições
+├── CONSTITUICAO.md     princípios invioláveis, decisões transversais D-01…D-07, restrições
 └── specs/
     ├── SPEC-01-stack-e-base.md
     ├── SPEC-02-rede-de-testes.md
     ├── SPEC-03-nucleo-alvo.md
     ├── SPEC-04-seguranca-e-validacao.md
     ├── SPEC-05-observabilidade-e-configuracao.md
-    └── SPEC-06-entrega-e-arquitetura.md
+    ├── SPEC-06-entrega-e-arquitetura.md
+    └── SPEC-07-outbox-dynamodb.md
 ```
 
 Contexto de negócio em [`../VISAO-DE-NEGOCIO.md`](../VISAO-DE-NEGOCIO.md). Arquitetura produtiva em [`../rfc/RFC-0001`](../rfc/RFC-0001-arquitetura-produtiva-aws.md) e [`../adr/ADR-0001`](../adr/ADR-0001-notificacoes-assincronas-saga-orquestrada.md).
@@ -42,10 +43,11 @@ Cada spec tem o mesmo esqueleto: **Objetivo → Contexto verificado → Requisit
 | 4 | [SPEC-04 — Segurança e validação](./specs/SPEC-04-seguranca-e-validacao.md) | Paralela a SPEC-05: tocam camadas diferentes (entrada/segurança vs. instrumentação/config) e não colidem | Testes de fail-closed e de validação verdes |
 | 5 | [SPEC-05 — Observabilidade e configuração](./specs/SPEC-05-observabilidade-e-configuracao.md) | Idem | `docker compose up` sobe app + Prometheus + Grafana |
 | 6 | [SPEC-06 — Entrega e arquitetura](./specs/SPEC-06-entrega-e-arquitetura.md) | O CI valida o conjunto; o mapeamento porta→AWS do RFC exige os nomes reais de SPEC-03 | Pipeline verde em PR e em push para `main` |
+| 7 | [SPEC-07 — Outbox DynamoDB](./specs/SPEC-07-outbox-dynamodb.md) | Entrega adicional, pós-SPEC-06: primeiro passo em código do caminho de migração incremental do RFC-0001/ADR-0001 | `./mvnw clean verify` verde, adapter real testado via Testcontainers |
 
 ```
 SPEC-01 ──> SPEC-02 ──> SPEC-03 ──┬──> SPEC-04 ──┐
-                                  └──> SPEC-05 ──┴──> SPEC-06
+                                  └──> SPEC-05 ──┴──> SPEC-06 ──> SPEC-07
 ```
 
 ## Mapa de decisões × specs
@@ -58,6 +60,7 @@ SPEC-01 ──> SPEC-02 ──> SPEC-03 ──┬──> SPEC-04 ──┐
 | D-04 `valor_total_itens` validado | SPEC-04 | teste nos dois sentidos (divergente → `400`, dentro da tolerância → `200`) |
 | D-05 tributo ignora `quantidade` | preservada em SPEC-03 | travada por teste em SPEC-02 |
 | D-06 campos descartados | preservada (nenhuma ação) | teste de contrato em quatro níveis, SPEC-02 |
+| D-07 outbox DynamoDB substitui D-01/D-02 | SPEC-07 | `DynamoDbNotaFiscalProcessamentoAdapterTest` (Testcontainers) e `GerarNotaFiscalServiceTest` |
 
 ## Histórico
 

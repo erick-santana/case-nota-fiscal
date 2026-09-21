@@ -8,6 +8,8 @@
 | **Altera comportamento observável?** | Não |
 | **Constituição** | [P4](../CONSTITUICAO.md#p4--executável-localmente-sem-aws-real) |
 
+> **Nota de revisão ([SPEC-07](./SPEC-07-outbox-dynamodb.md))**: a tabela porta→adaptador→AWS abaixo (com `EstoqueNotificacaoPort`/`RegistroNotificacaoPort`/`EntregaNotificacaoPort`/`FinanceiroNotificacaoPort`) descreve o estado entregue até esta spec, já superado — ver a versão atual da mesma tabela em [RFC-0001](../../rfc/RFC-0001-arquitetura-produtiva-aws.md#mapeamento-hexagonal-portas-e-adaptadores--componentes-aws). A afirmação de "ausência de persistência" na seção "Verificação" também não é mais verdadeira.
+
 ## Objetivo
 
 Entregar um pipeline de CI funcional e a arquitetura produtiva documentada com trade-offs explícitos, para que mudanças cheguem a produção de forma repetível e para que se entenda como este código se mapeia à infraestrutura real.
@@ -175,13 +177,13 @@ A leitura importante da tabela — e que só fica evidente com os nomes na mão:
 
 ## Plano de execução
 
-- [ ] Criar `.github/workflows/ci.yml` com JDK 21, `./mvnw -B clean verify` e job de build de imagem com smoke test.
-- [ ] Usar o health check de SPEC-05 no smoke test do contêiner, em vez de grep no log.
-- [ ] Incluir o step de verificação de segredo em properties.
-- [ ] Documentar estratégia de deployment (rolling update + deployment circuit breaker no ECS), rollback (task definition anterior, imagens imutáveis por `git sha`) e monitoramento pós-deploy.
-- [ ] Documentar a matriz de promoção por ambiente (`dev`/`staging`/`prod`), coerente com os perfis de SPEC-05.
-- [ ] Acrescentar ao RFC-0001 a tabela **porta → adaptador → componente AWS**, com os nomes reais implementados em SPEC-03.
-- [ ] Revisar RFC-0001/ADR-0001 contra o código entregue — remover qualquer afirmação que descreva o estado pré-entrega como atual.
+- [x] Criar `.github/workflows/ci.yml` com JDK 21, `./mvnw -B clean verify` e job de build de imagem com smoke test. Validado localmente: `./mvnw -B clean verify` (128 testes, BUILD SUCCESS), `./mvnw spring-boot:build-image` e o smoke test de readiness contra o contêiner resultante — todos passam com o conteúdo exato do workflow.
+- [x] Usar o health check de SPEC-05 no smoke test do contêiner, em vez de grep no log.
+- [x] Incluir o step de verificação de segredo em properties. Validado que o `grep` do step de fato falha (exit não-zero) com um `arn:aws:` inserido de propósito, e passa limpo no estado atual do repositório.
+- [x] Documentar estratégia de deployment (rolling update + deployment circuit breaker no ECS), rollback (task definition anterior, imagens imutáveis por `git sha`) e monitoramento pós-deploy. Já redigido acima, em "CD, deployment e rollback".
+- [x] Documentar a matriz de promoção por ambiente (`dev`/`staging`/`prod`), coerente com os perfis de SPEC-05. Já redigido acima, em "Promoção por ambiente".
+- [x] Acrescentar ao RFC-0001 a tabela **porta → adaptador → componente AWS**, com os nomes reais implementados em SPEC-03. Já presente em RFC-0001 (seção "Mapeamento hexagonal: portas e adaptadores → componentes AWS").
+- [x] Revisar RFC-0001/ADR-0001 contra o código entregue — remover qualquer afirmação que descreva o estado pré-entrega como atual. Desvio encontrado e corrigido: o Contexto de RFC-0001 e ADR-0001 ainda descrevia as quatro notificações como síncronas *sequenciais* com `new EstoqueService()` etc. e o bug de +5s como estado "hoje" — mas SPEC-03 já entregou portas hexagonais + paralelização via `CompletableFuture` e removeu o bug. A tabela comparativa de RFC-0001 também rotulava "Atual" a linha errada (sequencial, não paralelo). Reescrito para deixar claro qual é o estado herdado (motivação histórica) e qual é o estado atual entregue; corrigido também `GeradorNotaFiscalServiceImpl` → `GerarNotaFiscalService` (classe renomeada em SPEC-03) e a afirmação de que a API Gateway resolveria "hoje sem nenhuma proteção" (SPEC-04 já entrega autenticação JWT a nível de aplicação; o que falta é proteção de borda, não autenticação).
 
 ## Verificação
 
@@ -199,3 +201,22 @@ A leitura importante da tabela — e que só fica evidente com os nomes na mão:
 - Push de imagem para ECR e job de deploy — documentados, não habilitados.
 - Blue/green via CodeDeploy — registrado como evolução, não escolha inicial.
 - IaC (Terraform/CDK): RFC-0001 é proposta arquitetural (P4).
+
+## Adendo — scan de segurança de dependências e de imagem (Trivy)
+
+Adicionado depois da entrega inicial deste spec, a pedido explícito, como reforço de segurança no próprio `ci.yml` — não altera nenhum REQ-6.x acima.
+
+**Ferramenta escolhida: [Trivy](https://github.com/aquasecurity/trivy) (Aqua Security, Apache-2.0) para os dois scans — SCA (dependências) e imagem.** A primeira tentativa foi OWASP Dependency-Check (`org.owasp:dependency-check-maven:13.0.0`), mas falhou de forma reprodutível em execução local: a versão atual da API do NVD exige `nvdApiKey` mesmo para a atualização básica da base — sem ela, o plugin lança `NvdApiException: Invalid API Key` e o build não completa. Provisionar essa credencial contraria o mesmo princípio de REQ-6.7 (nenhum workflow dependendo de credencial que este projeto não tem e não vai criar). Trivy usa sua própria base de vulnerabilidades (agregando GHSA/OSV/etc., distribuída via GHCR), sem exigir nenhuma chave — testado e confirmado localmente antes de entrar no workflow.
+
+**Achado real, corrigido no mesmo commit**: o primeiro scan (`trivy fs` contra o `pom.xml` efetivo) encontrou 3 CVEs **CRITICAL** em `org.apache.tomcat.embed:tomcat-embed-core:11.0.24` (versão trazida pelo BOM do `spring-boot-starter-parent:4.1.1`): CVE-2026-65182, CVE-2026-65905, CVE-2026-68525, todas corrigidas em 11.0.25. Resolvido sobrepondo a property gerenciada pelo BOM (`<tomcat.version>11.0.25</tomcat.version>` em `pom.xml`) — confirmado localmente: os 128 testes continuam verdes e o scan (fs e, depois de reconstruída a imagem, também de imagem) fica limpo.
+
+**Onde entram no `ci.yml`**:
+- `build-and-test`, depois de `./mvnw clean verify` (para reaproveitar o `~/.m2` já resolvido): `trivy fs` contra a raiz do repositório — CVEs em dependências diretas/transitivas via `pom.xml`.
+- `build-image`, depois de `spring-boot:build-image` e antes do smoke test: `trivy image` contra `geradornotafiscal:${{ github.sha }}` — CVEs no JRE, nas camadas dos buildpacks e nos jars empacotados.
+- Ambos com `--severity CRITICAL,HIGH --ignore-unfixed --exit-code 1`: falha o job só para achados com severidade alta que já têm correção disponível — uma CVE sem fix publicado bloquearia o pipeline permanentemente por um problema fora do controle deste repositório.
+
+**Decisão deliberada: não usar a Action `aquasecurity/trivy-action`.** Em março de 2026, esse repositório sofreu um comprometimento de cadeia de suprimentos real: um atacante reescreveu 76 das 77 tags de versão (incluindo tags antigas já usadas em pipelines de terceiros) para apontar para commits maliciosos que roubavam segredos de CI/CD (ver [aviso da Aqua Security](https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23)). Em vez de fixar a Action por SHA (mitigação padrão, mas ainda dependente de uma terceira parte cujo histórico já teve esse problema), o scan invoca diretamente a imagem oficial `aquasec/trivy`, fixada por **digest completo** (`aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969`), via `docker run` simples — o runner do GitHub Actions já tem Docker disponível, sem dependência adicional de Action de terceiro para esta etapa.
+
+**Cache**: base de vulnerabilidades do Trivy (~115MB) e base de bibliotecas Java para scan de imagem (~1GB, baixada só na primeira execução da semana) ficam em `~/.cache/trivy`, cacheados via `actions/cache` com chave semanal (`trivy-db-<ano>-<semana>` + `restore-keys` para reaproveitar cache de semanas anteriores) — evita rebaixar ~1GB em toda execução.
+
+**Fora deste adendo, por pedido explícito**: scan de segredos no histórico do git (Gitleaks) e gates de qualidade estática (SpotBugs/PMD/Checkstyle) não foram adicionados — ficam como possível evolução futura.

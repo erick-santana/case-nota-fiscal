@@ -1,12 +1,14 @@
 package br.com.itau.geradornotafiscal.adapter.in.web;
 
 import br.com.itau.geradornotafiscal.model.Pedido;
+import br.com.itau.geradornotafiscal.testsupport.OutboxTestConfig;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(OutboxTestConfig.class)
 class GerarNotaFiscalContratoTest {
 
     private static final String ENDPOINT = "/api/pedido/gerarNotaFiscal";

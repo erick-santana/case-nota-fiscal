@@ -9,6 +9,8 @@
 | **Altera comportamento observável?** | Não — a instrumentação é transversal e não toca o payload |
 | **Constituição** | [P2](../CONSTITUICAO.md#p2--o-contrato-json-é-imutável), [P4](../CONSTITUICAO.md#p4--executável-localmente-sem-aws-real) |
 
+> **Nota de revisão ([SPEC-07](./SPEC-07-outbox-dynamodb.md))**: os quatro adaptadores simulados citados abaixo (`EstoqueAdapter`, `RegistroAdapter`, `EntregaAdapter`+`EntregaIntegrationAdapter`, `FinanceiroAdapter`) foram removidos; o aspecto único (`MetricasAdaptadorSaidaAspect`) hoje instrumenta um único adaptador real, `DynamoDbNotaFiscalProcessamentoAdapter`. O texto abaixo é histórico.
+
 ## Objetivo
 
 Entregar métricas, logs estruturados, health checks e configuração externalizada por ambiente, para que o serviço seja monitorável em produção e implantável na AWS sem perder a execução local sem fricção (P4).
@@ -16,7 +18,7 @@ Entregar métricas, logs estruturados, health checks e configuração externaliz
 ## Contexto verificado
 
 - `pom.xml` não tem `spring-boot-starter-actuator` nem `micrometer-registry-prometheus`.
-- `src/main/resources/application.properties` está vazio — uma linha em branco. Nenhum profile existe.
+- `src/main/resources/application.properties` já tem `spring.profiles.default=local` (adicionado por SPEC-04); nenhum outro profile existe ainda.
 - `GeradorNotaFiscalApplication` tem 13 linhas: `@SpringBootApplication` + `SpringApplication.run`. Nenhuma classe do projeto lê `@Value`, `@ConfigurationProperties` ou `System.getenv()`.
 - Não há `logback-spring.xml`, `Dockerfile`, `docker-compose.yml` nem `.github/`.
 - `.gitignore` não ignora `.env`.
@@ -195,18 +197,27 @@ docker compose up
 
 ## Plano de execução
 
-- [ ] Adicionar `spring-boot-starter-actuator` e `micrometer-registry-prometheus`.
-- [ ] Expor Actuator em **porta de management separada** (`management.server.port`), restrita por rede/SG.
-- [ ] Configurar probes de liveness/readiness compatíveis com ALB/ECS, com os nomes de propriedade da versão adotada em SPEC-01.
-- [ ] Instrumentar tempo de resposta do endpoint, contador de falhas e volume de itens processados.
-- [ ] Instrumentar tempo/falha **por adaptador de saída**, via um `@Aspect` único sobre as portas.
-- [ ] Logging estruturado JSON com `idNotaFiscal`/`idPedido` em MDC.
-- [ ] Garantir que nenhum log emite o payload completo; mascarar `Documento.numero`. Regra de LGPD registrada e coberta por teste.
-- [ ] Criar `application.properties` + `application-{local,dev,staging,prod}.properties`, sem credencial ou endpoint literal.
-- [ ] Criar `docker-compose.yml` subindo aplicação + Prometheus + Grafana (ativos, não comentados), `.env.example`, e adicionar `.env` ao `.gitignore`.
-- [ ] Provisionar datasource e dashboard do Grafana por arquivo em `docker/grafana/provisioning/`.
-- [ ] Documentar o pré-requisito `./mvnw spring-boot:build-image` e `cp .env.example .env` antes de `docker compose up`.
-- [ ] Verificação estática: nenhum literal `*.amazonaws.com`, ARN ou `AKIA` em properties versionadas.
+- [x] Adicionar `spring-boot-starter-actuator` e `micrometer-registry-prometheus`. Desvio registrado: também foi necessário `spring-boot-starter-aspectj` (não previsto no plano original) — ver nota abaixo.
+- [x] Expor Actuator em **porta de management separada** (`management.server.port`), restrita por rede/SG.
+- [x] Configurar probes de liveness/readiness compatíveis com ALB/ECS, com os nomes de propriedade da versão adotada em SPEC-01. Confirmado por inspeção do jar `spring-boot-health-4.1.1` (o módulo de health foi desmembrado do `spring-boot-actuator` nessa versão): `management.endpoint.health.probes.enabled`, `management.health.livenessstate.enabled`, `management.health.readinessstate.enabled` mantidos da 3.x.
+- [x] Instrumentar tempo de resposta do endpoint, contador de falhas e volume de itens processados. Feito diretamente em `GerarNotaFiscalService` (não via aspecto) — REQ-5.3 não exige um mecanismo específico, e um segundo aspecto só para o caso de uso seria abstração sem uso real, já que há um único ponto de entrada.
+- [x] Instrumentar tempo/falha **por adaptador de saída**, via um `@Aspect` único sobre as portas (`MetricasAdaptadorSaidaAspect`, em `application/observabilidade/`, fora de `adapter/out/` para não instrumentar a si mesmo).
+- [x] Logging estruturado JSON com `idNotaFiscal`/`idPedido` em MDC. Desvio registrado: sem `logback-spring.xml` — ver nota abaixo.
+- [x] Garantir que nenhum log emite o payload completo; mascarar `Documento.numero`. Regra de LGPD registrada e coberta por teste (`ObservabilidadeTest`, asserção sobre `ILoggingEvent` capturado por `ListAppender`, não sobre a formatação JSON).
+- [x] Criar `application.properties` + `application-{local,dev,staging,prod}.properties`, sem credencial ou endpoint literal.
+- [x] Criar `docker-compose.yml` subindo aplicação + Prometheus + Grafana (ativos, não comentados), `.env.example`, e adicionar `.env` ao `.gitignore`. Desvio registrado: healthcheck sem `curl` — ver nota abaixo.
+- [x] Provisionar datasource e dashboard do Grafana por arquivo em `docker/grafana/provisioning/`.
+- [x] Documentar o pré-requisito `./mvnw spring-boot:build-image` e `cp .env.example .env` antes de `docker compose up`.
+- [x] Verificação estática: nenhum literal `*.amazonaws.com`, ARN ou `AKIA` em properties versionadas.
+
+**Desvios em relação ao desenho literal desta spec, e por quê:**
+
+1. **`spring-boot-starter-aop` não existe na 4.1.1** — a distribuição de starters do Boot 4 removeu esse artefato; `MetricasAdaptadorSaidaAspect` precisa de proxying via `@Aspect`, então a dependência usada é `spring-boot-starter-aspectj` (traz `spring-aop` e `aspectjweaver`; o `AopAutoConfiguration` do Boot habilita `@EnableAspectJAutoProxy` automaticamente ao detectar o weaver no classpath). Sem nenhuma delas o aspecto compila mas nunca intercepta nada — falha silenciosa, não de build.
+2. **`EndpointRequest` mudou de pacote.** Em vez de `org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest` (3.x), a 4.1.1 move a classe para `org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest`, no módulo `spring-boot-security` — já presente transitivamente via `spring-boot-starter-oauth2-resource-server` (SPEC-04), sem dependência nova. `actuatorSecurityFilterChain` foi implementado em `SecurityConfig` (SPEC-04 já previa e deferiu esse bean para aqui).
+3. **Sem `logback-spring.xml`.** A 4.1.1 traz *Structured Logging* nativo (`logging.structured.format.console=logstash`), que inclui o MDC como campos de topo do JSON sem nenhuma dependência extra (nem `logstash-logback-encoder`) e sem arquivo de configuração do Logback. Verificado empiricamente: uma requisição real produz `{"...","idPedido":"1","idNotaFiscal":"...",...}` na saída padrão. Escrever um `logback-spring.xml` manual para reimplementar o que o Boot já faz nativamente seria a mesma duplicação que P1 pede para evitar.
+4. **`application-{dev,staging,prod}.properties` não declaram `spring.security.oauth2.resourceserver.jwt.issuer-uri`.** O esboço da seção "Desenho" mostrava essa property, mas `SecurityConfig.jwtDecoder` (SPEC-04) lê `OIDC_ISSUER_URI` diretamente via `@Value`, não essa property do Spring — declará-la violaria REQ-5.9 (nenhuma property sem leitor no código).
+5. **`integracao_downstream_seconds` tem cinco valores de `adapter`, não quatro.** `EntregaAdapter.agendar()` chama `EntregaIntegrationPort.criarAgendamento()` (implementado por `EntregaIntegrationAdapter`, também em `adapter/out/entrega/`), e o pointcut único intercepta as duas chamadas. As quatro portas de notificação (`EstoqueAdapter`, `RegistroAdapter`, `EntregaAdapter`, `FinanceiroAdapter`) continuam todas presentes; o quinto valor (`EntregaIntegrationAdapter`) é uma granularidade extra e não invalida a verificação.
+6. **Healthcheck do compose não usa `curl`.** A imagem Paketo `jammy-base` não inclui `curl` nem `wget`; testado via `docker exec`. O healthcheck usa `bash` (presente na imagem) com `/dev/tcp` para montar e ler uma requisição HTTP crua contra `/actuator/health/readiness` — validado de ponta a ponta com `docker compose up` real (container reportou `healthy`).
 
 ## Verificação
 

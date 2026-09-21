@@ -252,7 +252,7 @@ public class ApiExceptionHandler {
 - [x] Constraint condicional: `regime_tributacao` obrigatório quando `tipo_pessoa == JURIDICA`, anotada com `@JsonIgnore` para não vazar na resposta.
 - [x] `@Valid @RequestBody` no controller e `ApiExceptionHandler` estendido, devolvendo **`400` de fato** (`ResponseEntity`), com corpo estruturado e sem stack trace.
 - [x] `SecurityFilterChain` com JWT como complemento explícito de `local`/`test` (`@Profile("!local & !test")`, não incondicional — ver nota abaixo); cadeia permissiva apenas sob `local`/`test`, com `@Order` explícito (*fail-closed*).
-- [ ] Chain dedicado do Actuator via `EndpointRequest.toAnyEndpoint()` — depende do `spring-boot-starter-actuator` que só SPEC-05 introduz; fora de escopo aqui (ver nota abaixo).
+- [x] Chain dedicado do Actuator via `EndpointRequest.toAnyEndpoint()` — depende do `spring-boot-starter-actuator` que só SPEC-05 introduz; implementado em `SecurityConfig` por [SPEC-05](./SPEC-05-observabilidade-e-configuracao.md#actuator-em-porta-de-management-separada), não aqui (ver nota abaixo).
 - [x] Escrever os testes de segurança contra a cadeia real (`@ActiveProfiles("dev")` + `@MockitoBean JwtDecoder`) e contra um perfil não previsto (`@ActiveProfiles("qa")`, sem propriedade alguma).
 
 **Desvios em relação ao desenho literal desta spec, e por quê:**

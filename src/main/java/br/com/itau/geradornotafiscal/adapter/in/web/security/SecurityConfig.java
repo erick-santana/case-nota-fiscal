@@ -1,5 +1,6 @@
 package br.com.itau.geradornotafiscal.adapter.in.web.security;
 
+import org.springframework.boot.security.autoconfigure.actuate.web.servlet.EndpointRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +28,23 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    /**
+     * Endpoints do Actuator ficam liberados em qualquer perfil: quem decide quem alcança
+     * {@code /actuator/*} é o isolamento de rede da porta de management (SPEC-05, REQ-5.1),
+     * não uma credencial de aplicação — exigir JWT do scraper do Prometheus ou do health check
+     * do target group obrigaria a distribuir um token para infraestrutura, sem ganho de segurança
+     * real numa porta que já não é alcançável de fora.
+     */
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    SecurityFilterChain actuatorSecurityFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .securityMatcher(EndpointRequest.toAnyEndpoint())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .csrf(AbstractHttpConfigurer::disable)
+                .build();
+    }
 
     @Bean
     @Profile("!local & !test")
@@ -59,7 +77,7 @@ public class SecurityConfig {
 
     @Bean
     @Profile({"local", "test"})
-    @Order(Ordered.HIGHEST_PRECEDENCE)
+    @Order(Ordered.HIGHEST_PRECEDENCE + 1)
     SecurityFilterChain cadeiaPermissivaLocal(HttpSecurity http) throws Exception {
         return http
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())

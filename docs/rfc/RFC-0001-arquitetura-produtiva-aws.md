@@ -2,9 +2,11 @@
 
 ## Status
 
-Proposto.
+Parcialmente implementado.
 
 > **Nota de revisão**: a escolha de backbone de eventos mudou de EventBridge + SQS para **Kafka/MSK**. Em uma empresa de grande porte é mais plausível que os domínios downstream (Estoque, Registro, Entrega, Financeiro) pertençam a times distintos — cada um com ownership e, consequentemente, conta AWS próprios — do que a um único time interno; nesse cenário multi-domínio/multi-conta, Kafka/MSK como backbone padronizado entre domínios é a escolha mais coerente (ver seção "Alternativas consideradas e descartadas" e [ADR-0001](../adr/ADR-0001-notificacoes-assincronas-saga-orquestrada.md)). O restante do desenho (separar cálculo síncrono de notificações assíncronas, Saga orquestrada, outbox) não muda.
+
+> **Nota de entrega**: [SPEC-07](../sdd/specs/SPEC-07-outbox-dynamodb.md) implementou em código o passo 3 do "Caminho de migração incremental" abaixo (outbox no DynamoDB) e removeu as quatro chamadas síncronas do passo 4 — sem a dupla-escrita que o passo 3 previa (ver justificativa em SPEC-07). MSK/Kafka, os quatro consumer groups, o Saga coordinator e `GET /status` continuam proposta arquitetural, não código deste repositório.
 
 ## Contexto
 
@@ -15,7 +17,7 @@ O serviço, descrito em [`VISAO-DE-NEGOCIO.md`](../VISAO-DE-NEGOCIO.md), recebe 
 3. monta a `NotaFiscal` e a devolve ao chamador;
 4. **avisa quatro sistemas/áreas da empresa** de que a venda aconteceu: Estoque (baixa), Registro fiscal/contábil, Entrega/logística (agendamento) e Financeiro (contas a receber).
 
-Hoje o passo 4 é implementado em `GeradorNotaFiscalServiceImpl.gerarNotaFiscal` como quatro chamadas **síncronas, sequenciais, bloqueantes**, cada uma instanciando o serviço com `new` (não são beans, não passam por porta de saída):
+O passo 4 chegou a este RFC implementado como quatro chamadas **síncronas, sequenciais, bloqueantes**, cada uma instanciando o serviço com `new` (não eram beans, não passavam por porta de saída), com um bug adicional em `EntregaIntegrationPort` que somava +5s quando a nota tinha mais de 5 itens:
 
 ```java
 new EstoqueService().enviarNotaFiscalParaBaixaEstoque(notaFiscal);
@@ -24,9 +26,11 @@ new EntregaService().agendarEntrega(notaFiscal);
 new FinanceiroService().enviarNotaFiscalParaContasReceber(notaFiscal);
 ```
 
-Cada uma simula a latência de uma chamada real (`Thread.sleep`): Estoque 380ms, Registro 500ms, Entrega 150ms + 200ms (mais um bug de +5s quando a nota tem mais de 5 itens, em `EntregaIntegrationPort`), Financeiro 250ms. Somadas e sequenciais, isso já custa ~1,3s por requisição no caminho feliz, e ~6,3s no caso de bug de >5 itens — e qualquer uma dessas quatro integrações ficando lenta ou fora do ar **trava a resposta HTTP inteira**, mesmo que o cálculo fiscal (a parte que realmente define o contrato da API) tenha sido concluído instantaneamente.
+**Esse estado já não é o atual.** [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md) entregou o passo 1 do caminho de migração incremental proposto mais abaixo: as quatro chamadas foram extraídas para *driven ports* hexagonais (`EstoqueNotificacaoPort`, `RegistroNotificacaoPort`, `EntregaNotificacaoPort`, `FinanceiroNotificacaoPort`), implementadas por adaptadores injetados como beans (`EstoqueAdapter`, `RegistroAdapter`, `EntregaAdapter`, `FinanceiroAdapter`), disparados em paralelo via `CompletableFuture` em `GerarNotaFiscalService.notificar`, e o bug de +5s foi removido na origem (`EntregaIntegrationAdapter`).
 
-Este RFC propõe a arquitetura de deployment produtivo na AWS para este serviço, com foco especial em resolver esse acoplamento síncrono entre "calcular a nota" e "avisar o resto da empresa", usando um desenho orientado a eventos com compensação via Saga.
+Cada adaptador simula a latência de uma chamada real (`Thread.sleep`): Estoque 380ms, Registro 500ms, Entrega 150ms + 200ms, Financeiro 250ms. Rodando em paralelo, isso já reduziu o caminho feliz de ~1,3s (soma sequencial) para ~500ms (máximo das quatro) e eliminou o pico de +6,3s do bug de >5 itens. **O que a paralelização não resolve** — e é o problema que este RFC endereça — é o acoplamento de disponibilidade: a resposta HTTP ainda espera a confirmação das quatro integrações (`CompletableFuture.allOf(...).join()`), então qualquer uma delas ficando lenta ou fora do ar ainda **trava ou falha a resposta HTTP inteira**, mesmo que o cálculo fiscal (a parte que realmente define o contrato da API) já tenha terminado.
+
+Este RFC propõe a arquitetura de deployment produtivo na AWS para este serviço, com foco especial em resolver esse acoplamento síncrono restante entre "calcular a nota" e "avisar o resto da empresa", usando um desenho orientado a eventos com compensação via Saga.
 
 ### Restrições que esta proposta respeita
 
@@ -97,14 +101,14 @@ flowchart TB
 | Peça | Papel | Por quê |
 |---|---|---|
 | CloudFront + WAF | Borda pública | Mitigação de DDoS/L7, cache não se aplica (POST), regras de rate-limit por IP/rota |
-| API Gateway (HTTP API) | Entrada única, autenticação | Throttling, validação de payload, autorizer JWT (Cognito ou IdP corporativo via OIDC) — resolve o item "hoje sem nenhuma proteção" |
-| ECS Fargate (multi-AZ) | Roda o `GeradorNotaFiscalServiceImpl` | Sem servidor para gerenciar, autoscaling por CPU/RPS, rolling/blue-green deploy; alternativa é EKS se a empresa já padronizar em Kubernetes |
+| API Gateway (HTTP API) | Entrada única, autenticação | Throttling, validação de payload, autorizer JWT (Cognito ou IdP corporativo via OIDC) — complementa, na borda, a validação JWT que [SPEC-04](../sdd/specs/SPEC-04-seguranca-e-validacao.md) já entrega a nível de aplicação (`SecurityConfig`), acrescentando proteção que hoje não existe: WAF, throttling e rate-limit antes de o tráfego alcançar a VPC |
+| ECS Fargate (multi-AZ) | Roda o `GerarNotaFiscalService` | Sem servidor para gerenciar, autoscaling por CPU/RPS, rolling/blue-green deploy; alternativa é EKS se a empresa já padronizar em Kubernetes |
 | DynamoDB `nota_fiscal_processamento` | Estado por `idNotaFiscal` (outbox + status) | Acesso é por chave única (`idNotaFiscal`), padrão ideal para DynamoDB; vira também a fonte de auditoria de "quais das 4 áreas confirmaram" — hoje isso não existe (sem persistência) |
 | DynamoDB Streams + Lambda relay | Publica evento de forma confiável | Implementa o **padrão Transactional Outbox**: grava estado e evento no mesmo `PutItem`, e só depois o relay publica no tópico Kafka — evita perder eventos se o `ECS` cair entre calcular a nota e publicar |
 | Amazon MSK — tópico `notafiscal.emitida.v1` | Backbone de eventos de domínio, compartilhado entre times | Em uma empresa de grande porte, é mais plausível que Estoque/Registro/Entrega/Financeiro sejam domínios de negócio com ownership e conta AWS próprios do que consumidores internos de um único time — cenário em que um backbone padronizado entre domínios (Kafka/MSK) é mais coerente do que um backbone dedicado só a este serviço. Chave de partição = `idNotaFiscal` (ver seção "Estratégia de particionamento") |
 | Schema Registry (AWS Glue Schema Registry) | Contrato de evento versionado entre times | 4+ times consumidores não coordenam deploy com o produtor; compatibilidade `BACKWARD` obrigatória antes de aceitar um novo schema no tópico |
 | MSK Multi-VPC connectivity + IAM auth (`AWS_MSK_IAM`) | Conectividade e autorização cross-account | Cada conta consumidora conecta via seu próprio ENI, sem expor a VPC inteira; ACL por tópico restringe quem produz (só o serviço de Nota Fiscal em `notafiscal.*`) e quem consome/publica em cada tópico de outcome |
-| Consumer groups (4x, um por time, cada em sua conta) | Adaptadores de saída (hexagonal) | Substituem os `new EstoqueService()` etc. por consumidores Kafka independentes, escaláveis e com retry/DLQ próprios via tópicos `.retry`/`.dlq` (Spring Kafka `@RetryableTopic`) |
+| Consumer groups (4x, um por time, cada em sua conta) | Adaptadores de saída (hexagonal) | Substituem os adaptadores síncronos atuais (`EstoqueAdapter` etc., por trás das portas de saída) por consumidores Kafka independentes, escaláveis e com retry/DLQ próprios via tópicos `.retry`/`.dlq` (Spring Kafka `@RetryableTopic`) |
 | Saga coordinator (Kafka Streams / Spring Kafka + state store) | Orquestrador da Saga | Consome os 4 tópicos de outcome, correlaciona por `idNotaFiscal`, decide sucesso/compensação — papel que antes seria do Step Functions, agora nativo do mesmo backbone de eventos, sem misturar dois brokers para a mesma transação |
 | Secrets Manager / Parameter Store | Config e credenciais por ambiente | Sem hardcode, resolve o requisito de configuração por ambiente de SPEC-05 |
 | CloudWatch + X-Ray + Micrometer + métricas MSK | Observabilidade | Rastreamento distribuído fim a fim por `idNotaFiscal`, mais lag por consumer group e bytes-in/messages-in por partição — essencial para detectar hot partitions em produção |
@@ -195,8 +199,8 @@ Uma alternativa mais simples — e que também resolve boa parte do problema de 
 
 | Opção | Latência da resposta | Acoplamento de disponibilidade | Consistência | Complexidade operacional |
 |---|---|---|---|---|
-| **Atual**: síncrono sequencial | soma das 4 (~1,3s, ou ~6,3s com bug >5 itens) | resposta cai se qualquer uma das 4 cair | forte, mas frágil (uma exceção no meio derruba a nota já calculada) | baixa |
-| Síncrono paralelo | max das 4 (~500ms) | resposta ainda cai se qualquer uma das 4 cair ou ficar lenta | forte | baixa |
+| Original (pré-SPEC-03): síncrono sequencial | soma das 4 (~1,3s, ou ~6,3s com bug >5 itens) | resposta cai se qualquer uma das 4 cair | forte, mas frágil (uma exceção no meio derruba a nota já calculada) | baixa |
+| **Atual (SPEC-03)**: síncrono paralelo | max das 4 (~500ms) | resposta ainda cai se qualquer uma das 4 cair ou ficar lenta | forte | baixa |
 | **Proposto**: orientado a eventos + Saga | tempo do cálculo fiscal (~dezenas de ms) | resposta não depende de nenhuma das 4 integrações | eventual, com compensação explícita | mais alta (MSK/Kafka, Schema Registry, Saga coordinator, DynamoDB) |
 
 A paralelização é uma melhoria real e de baixo custo (entregue em SPEC-03 como ganho de curto prazo), mas não resolve o problema estrutural: a API de emissão de nota continua **acoplada em disponibilidade** a quatro sistemas de terceiros que não têm relação com o cálculo fiscal em si. Um outage no sistema de Entrega, por exemplo, não deveria impedir a emissão da nota fiscal.
@@ -220,34 +224,33 @@ O custo é complexidade operacional adicional — mais peças para monitorar, al
 Não é um corte único. Ordem sugerida, compatível com os planos de execução de `docs/sdd/specs/`:
 
 1. Extrair as quatro chamadas para *driven ports* (hexagonal) — pré-requisito para trocar o adapter síncrono por um publisher de evento sem tocar no domínio. **Entregue em [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md)**; ver o mapeamento porta→AWS abaixo.
-2. Paralelizar as chamadas síncronas atuais (virtual threads) como ganho imediato de performance — já resolve o sintoma de latência enquanto a infraestrutura de eventos é construída. **Entregue em [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md)**.
-3. Introduzir o outbox (DynamoDB) e publicar o evento `NotaFiscalEmitida` no tópico MSK `notafiscal.emitida.v1` (com a chave de partição `idNotaFiscal` definida desde o início — trocar chave de partição depois de haver tráfego real é disruptivo) **mantendo** as chamadas síncronas atuais em paralelo, para validar consumidores novos sem risco (dupla escrita temporária).
-4. Migrar os quatro consumidores para consumer groups Kafka assíncronos (cada um na conta do time correspondente, via MSK Multi-VPC + IAM auth), remover as chamadas síncronas, expor `GET /status`.
-5. Introduzir o Saga coordinator (Kafka-nativo) com as compensações reais assim que houver clareza de qual ação de estorno cada sistema downstream expõe (isso depende de contrato com os times donos de Estoque/Registro/Entrega/Financeiro, fora do controle deste serviço) — inclui negociar com cada time o ACL/IAM de acesso ao tópico principal e o tópico de outcome que cada um publicará.
+2. Paralelizar as chamadas síncronas atuais (virtual threads) como ganho imediato de performance — já resolve o sintoma de latência enquanto a infraestrutura de eventos é construída. **Entregue em [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md)**, superada por SPEC-07.
+3. Introduzir o outbox (DynamoDB), com a chave de partição `idNotaFiscal` definida desde o início para o futuro tópico MSK (trocar chave de partição depois de haver tráfego real é disruptivo). **Entregue em [SPEC-07](../sdd/specs/SPEC-07-outbox-dynamodb.md)** — com um desvio deliberado: sem a dupla-escrita que este item previa (justificativa em SPEC-07), já que este passo também removeu as quatro chamadas síncronas do item 4.
+4. Publicar o evento `NotaFiscalEmitida` no tópico MSK `notafiscal.emitida.v1` a partir do DynamoDB Streams (Lambda relay) e migrar os quatro consumidores para consumer groups Kafka assíncronos (cada um na conta do time correspondente, via MSK Multi-VPC + IAM auth), expor `GET /status`. **Não entregue** — infraestrutura AWS real (Lambda, MSK), fora deste código-fonte.
+5. Introduzir o Saga coordinator (Kafka-nativo) com as compensações reais assim que houver clareza de qual ação de estorno cada sistema downstream expõe (isso depende de contrato com os times donos de Estoque/Registro/Entrega/Financeiro, fora do controle deste serviço) — inclui negociar com cada time o ACL/IAM de acesso ao tópico principal e o tópico de outcome que cada um publicará. **Não entregue.**
 
 ## Mapeamento hexagonal: portas e adaptadores → componentes AWS
 
-A arquitetura hexagonal entregue em [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md) é o que torna esta migração possível sem tocar no domínio. Os nomes abaixo são os reais, implementados no código — não placeholders:
+A arquitetura hexagonal entregue em [SPEC-03](../sdd/specs/SPEC-03-nucleo-alvo.md) é o que tornou esta migração possível sem tocar no domínio. As quatro portas de notificação síncrona que existiam nesta tabela (`EstoqueNotificacaoPort`, `RegistroNotificacaoPort`, `EntregaNotificacaoPort`+`EntregaIntegrationPort`, `FinanceiroNotificacaoPort`) foram **removidas em [SPEC-07](../sdd/specs/SPEC-07-outbox-dynamodb.md)** — não sobrevivem como código neste serviço, nem como quatro adaptadores Kafka: a leitura que a versão anterior desta tabela já antecipava era exatamente essa, "as quatro portas de saída não viram quatro adaptadores Kafka". Tabela atual, com os nomes reais implementados:
 
-| Porta (SPEC-03) | Adaptador entregue (síncrono) | Destino produtivo | Componente AWS |
+| Porta | Adaptador entregue | Destino produtivo | Componente AWS |
 |---|---|---|---|
 | `GerarNotaFiscalUseCase` (entrada) | `GeradorNFController` | inalterado — adaptador web fino | API Gateway → VPC Link → ALB interno → ECS Fargate |
-| `EstoqueNotificacaoPort` | `EstoqueAdapter` (380ms) | consumer group na conta do time de Estoque | tópico `notafiscal.emitida.v1` / grupo `estoque-service` |
-| `RegistroNotificacaoPort` | `RegistroAdapter` (500ms) | consumer group na conta do time de Registro | `notafiscal.emitida.v1` / `registro-service` |
-| `EntregaNotificacaoPort` + `EntregaIntegrationPort` | `EntregaAdapter` + `EntregaIntegrationAdapter` (150ms + 200ms) | consumer group na conta do time de Entrega; a chamada à API externa de agendamento passa a ser interna ao consumidor | `notafiscal.emitida.v1` / `entrega-service` |
-| `FinanceiroNotificacaoPort` | `FinanceiroAdapter` (250ms) | consumer group na conta do time de Financeiro | `notafiscal.emitida.v1` / `financeiro-service` |
+| `NotaFiscalProcessamentoRepositoryPort` | `DynamoDbNotaFiscalProcessamentoAdapter` (SPEC-07) | tabela de outbox | DynamoDB `nota_fiscal_processamento` |
+| — (sem porta; infraestrutura, não domínio) | DynamoDB Streams + Lambda relay — **não entregue** | publica no barramento a partir do outbox | tópico `notafiscal.emitida.v1` |
+| — (sem porta; fora deste serviço) | consumer groups dos 4 times — **não entregue** | um consumer group por time | `notafiscal.emitida.v1` / `estoque-service`, `registro-service`, `entrega-service`, `financeiro-service` |
 | `domain/aliquota`, `domain/frete` | in-process, plain Java, sem I/O | inalterado | roda dentro do processo ECS, sem componente próprio |
 
-A leitura que importa: **as quatro portas de saída não viram quatro adaptadores Kafka.** Elas convergem para **um único** adaptador de publicação (outbox → `notafiscal.emitida.v1`), e o que hoje é "uma porta por sistema notificado" passa a ser "um consumer group por time", do outro lado do backbone. É exatamente o passo 3→4 do caminho de migração acima. O ganho das portas não é haver uma por destino — é que a troca de um adapter síncrono por um publisher não alcança `domain/` nem `GerarNotaFiscalService`.
+O ganho das portas nunca foi haver uma por destino — foi que a troca de um adapter síncrono por um adapter de outbox não alcançou `domain/` nem `GerarNotaFiscalService` (só o construtor do serviço e a implementação da porta de saída mudaram). É exatamente o passo 3 do caminho de migração acima, entregue; o passo 4 (Lambda relay + consumer groups) permanece a coluna "Componente AWS" desta tabela sem uma linha de código correspondente neste repositório.
 
 ## Demais aspectos da arquitetura produtiva
 
-- **Autenticação/autorização**: API Gateway com autorizer JWT validando tokens emitidos por Cognito (ou IdP corporativo via OIDC); IAM roles com least-privilege por task/lambda (task role distinta da execution role).
+- **Autenticação/autorização**: API Gateway com autorizer JWT validando tokens emitidos por Cognito (ou IdP corporativo via OIDC), em camada com a validação de token que a aplicação já faz hoje via OAuth2 resource server (`SecurityConfig`, [SPEC-04](../sdd/specs/SPEC-04-seguranca-e-validacao.md)) — defesa em profundidade, não redundância descartável, já que o ECS pode receber tráfego de outras origens internas além do API Gateway; IAM roles com least-privilege por task/lambda (task role distinta da execution role).
 - **Rede/segurança**: ECS e o Saga coordinator em subnets privadas; MSK Multi-VPC connectivity (ou VPC endpoints/PrivateLink para DynamoDB e Secrets Manager) evitando tráfego AWS-to-AWS pela internet e expor a VPC inteira às contas consumidoras; NAT Gateway só para egress a integrações externas reais; security groups por componente e ACL por tópico Kafka; criptografia em repouso (KMS) e em trânsito (TLS) em todas as peças.
 - **Escalabilidade/HA**: multi-AZ em ECS, DynamoDB e no cluster MSK por padrão; autoscaling do ECS por CPU/RPS; cada consumer group escala de forma independente por conta, limitado pelo número de partições do tópico (ver "Estratégia de particionamento").
 - **Resiliência**: Resilience4j (retry/circuit breaker/bulkhead) dentro dos consumidores para chamadas HTTP reais às integrações externas, complementando (não substituindo) o retry via tópicos `.retry`/`.dlq` (Spring Kafka `@RetryableTopic`) — Kafka não tem delay nativo por mensagem como o SQS; job periódico de timeout no Saga coordinator para sagas sem outcome de algum domínio (ver "Contrato de outcome, falha e timeout da Saga"); alarmes de consumer lag por grupo e de skew entre partições (candidato a hot partition).
 - **Observabilidade**: Micrometer exportando para CloudWatch/Prometheus+Grafana; X-Ray para tracing distribuído fim a fim por `idNotaFiscal`; métricas de lag por consumer group e bytes-in/messages-in por partição do MSK; health checks `/actuator/health/{liveness,readiness}` ligados ao target group do ALB, expostos em porta de management separada e alcançável apenas pelo security group do ALB e do scraper (ver [SPEC-05](../sdd/specs/SPEC-05-observabilidade-e-configuracao.md)).
-- **Persistência**: DynamoDB é a única persistência necessária para este desenho (estado de processamento); não há necessidade de RDS relacional a menos que surjam requisitos de relatório/BI sobre notas emitidas.
+- **Persistência**: DynamoDB é a única persistência necessária para este desenho (estado de processamento) — a gravação do registro já é código real ([SPEC-07](../sdd/specs/SPEC-07-outbox-dynamodb.md)); não há necessidade de RDS relacional a menos que surjam requisitos de relatório/BI sobre notas emitidas.
 
 ## Consequências
 

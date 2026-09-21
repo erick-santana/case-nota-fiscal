@@ -38,13 +38,17 @@ A rede de testes é ancorada no contrato HTTP — o único seam que sobrevive à
 
 Cada uma foi tomada uma única vez e vale para a entrega inteira. Specs referenciam por ID; não repetem a justificativa.
 
-### D-01 — As notificações são paralelizadas com virtual threads
+### D-01 — As notificações são paralelizadas com virtual threads (superada por D-07)
+
+> **Superada em [SPEC-07](./specs/SPEC-07-outbox-dynamodb.md).** As quatro chamadas síncronas que este `Executor` paralelizava foram removidas — o outbox transacional (D-07) não tem quatro chamadas para disparar. Mantida aqui como registro histórico de por que a paralelização foi a escolha certa *enquanto* essas chamadas ainda existiam no caminho síncrono.
 
 O `Executor` das quatro notificações é `Executors.newVirtualThreadPerTaskExecutor()`. As chamadas são I/O bloqueante puro — a carga exata em que virtual threads dispensam dimensionar pool, que é o principal risco de um pool de plataforma aqui: cada requisição consome quatro tarefas, então um pool pequeno enfileira sob concorrência e a latência volta a somar, enquanto um pool grande desperdiça threads bloqueadas.
 
 Aplicada em [SPEC-03](./specs/SPEC-03-nucleo-alvo.md#paralelização-com-virtual-threads-d-01). Justificativa de adoção de recurso Java 21 em [SPEC-01](./specs/SPEC-01-stack-e-base.md#recursos-de-java-21-adotados-nesta-entrega).
 
-### D-02 — Falha parcial nas notificações mantém o comportamento observável atual
+### D-02 — Falha parcial nas notificações mantém o comportamento observável atual (superada por D-07)
+
+> **Superada em [SPEC-07](./specs/SPEC-07-outbox-dynamodb.md).** Esta decisão previa exatamente sua própria superação: "isso só é seguro com o outbox e a saga do ADR-0001". SPEC-07 entrega o outbox (a saga em si continua fora de escopo — ADR-0001 passo 5). Não há mais quatro chamadas concorrentes: há uma única escrita síncrona no outbox, e sua falha responde `500` sem noção de "falha parcial".
 
 Com as quatro chamadas concorrentes, uma falha não impede que as outras três executem. A requisição continua respondendo `500` se qualquer uma falhar, e as quatro são aguardadas antes da resposta.
 
@@ -75,6 +79,12 @@ Endereça diretamente a inconsistência de "valor total calculado" relatada no R
 `bairro`, `cidade` e `pais` chegam em `enderecos[]` e não existem em `Endereco.java`; são descartados e somem da resposta, já que o `Destinatario` de entrada é ecoado na nota. Mapeá-los acrescentaria três campos ao JSON de saída.
 
 Mantemos o comportamento atual e o **travamos por teste de contrato**, registrando a pendência. O teste é o que impede que isso volte a passar despercebido.
+
+### D-07 — Outbox transacional no DynamoDB substitui as quatro notificações síncronas
+
+O serviço deixa de chamar Estoque/Registro/Entrega/Financeiro diretamente (D-01/D-02, superadas). Ao concluir o cálculo, grava um único registro no DynamoDB (`nota_fiscal_processamento`, status `PENDENTE` + payload do evento) e devolve a nota — sem esperar nenhuma das quatro áreas. A publicação no Kafka a partir dessa tabela (DynamoDB Streams → Lambda) e a decisão de sucesso/compensação (Saga coordinator) são responsabilidade de outros serviços, fora deste código-fonte.
+
+Este é o primeiro passo do caminho de migração incremental do [RFC-0001](../rfc/RFC-0001-arquitetura-produtiva-aws.md) implementado em código — os demais (consumidores Kafka dos quatro times, Saga coordinator, `GET /status`) permanecem proposta arquitetural, não código desta entrega. Aplicada em [SPEC-07](./specs/SPEC-07-outbox-dynamodb.md).
 
 ---
 

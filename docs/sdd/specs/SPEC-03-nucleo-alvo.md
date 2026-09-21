@@ -8,6 +8,8 @@
 | **Altera comportamento observável?** | **Sim, uma vez:** D-03 (`OUTROS` → `422`) |
 | **Constituição** | [P1](../CONSTITUICAO.md#p1--nada-é-especificado-contra-um-estado-intermediário), [P2](../CONSTITUICAO.md#p2--o-contrato-json-é-imutável), [P3](../CONSTITUICAO.md#p3--as-latências-simuladas-são-o-cenário-não-o-problema), [P5](../CONSTITUICAO.md#p5--um-teste-que-muda-junto-com-o-código-que-vigia-não-prova-nada) |
 
+> **Nota de revisão ([SPEC-07](./SPEC-07-outbox-dynamodb.md))**: as quatro portas/adaptadores de notificação síncrona descritos abaixo (`EstoqueNotificacaoPort`, `RegistroNotificacaoPort`, `EntregaNotificacaoPort`+`EntregaIntegrationPort`, `FinanceiroNotificacaoPort`) e D-01/D-02 foram **removidos e superados** por SPEC-07 — este documento permanece como registro histórico do que foi entregue nesta spec, não como descrição do código atual.
+
 ## Objetivo
 
 Entregar um núcleo em que as regras de cálculo vivam isoladas de frameworks e as integrações fiquem atrás de portas, **já sem** os bugs de isolamento e de performance — de modo que cada requisição produza uma nota correta em tempo estável, e que novas regras ou uma troca de integração não exijam tocar na classe principal.

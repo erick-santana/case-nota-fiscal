@@ -1,0 +1,62 @@
+{
+  "title": "Gerador de Nota Fiscal",
+  "uid": "geradornotafiscal",
+  "editable": false,
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tempo de resposta do endpoint (p95/p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(nota_fiscal_geracao_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(nota_fiscal_geracao_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Taxa de erro (notas com falha / total)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(nota_fiscal_falhas_total[5m])) / (sum(rate(nota_fiscal_geradas_total[5m])) + sum(rate(nota_fiscal_falhas_total[5m])))",
+          "legendFormat": "taxa de erro"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Volume de itens por nota",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(nota_fiscal_itens_processados_sum[5m]) / rate(nota_fiscal_itens_processados_count[5m])",
+          "legendFormat": "itens/nota (média)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Tempo por adaptador de saída",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(integracao_downstream_seconds_sum[5m])) by (adapter, resultado) / sum(rate(integracao_downstream_seconds_count[5m])) by (adapter, resultado)",
+          "legendFormat": "{{adapter}} ({{resultado}})"
+        }
+      ]
+    }
+  ]
+}

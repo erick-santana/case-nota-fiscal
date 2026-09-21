@@ -35,3 +35,6 @@ build/
 ### Robot Framework ###
 robot/.venv/
 robot/results/
+
+### Configuração de ambiente local ###
+.env
