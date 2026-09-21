@@ -1,0 +1,37 @@
+{
+  "id_pedido": 1,
+  "data": "2022-05-01",
+  "valor_total_itens": 100.0,
+  "valor_frete": 10.0,
+  "itens": [
+    {
+      "id_item": 1,
+      "descricao": "Teclado USB",
+      "valor_unitario": 50,
+      "quantidade": 2
+    }
+  ],
+  "destinatario": {
+    "nome": "John Doe",
+    "tipo_pessoa": "FISICA",
+    "documentos": [
+      {
+        "tipo": "CPF",
+        "numero": "88740347095"
+      }
+    ],
+    "enderecos": [
+      {
+        "logradouro": "Av do estado",
+        "numero": "5533",
+        "bairro": "Mooca",
+        "cidade": "São Paulo",
+        "estado": "SP",
+        "pais": "Brasil",
+        "cep": "03105003",
+        "finalidade": "ENTREGA",
+        "regiao": "SUDESTE"
+      }
+    ]
+  }
+}

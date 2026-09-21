@@ -1,0 +1,6 @@
+{
+  "id_pedido": 1,
+  "data": "2022-05-01",
+  "valor_total_itens": 100.0,
+  "valor_frete": 10.0,
+  "itens": [

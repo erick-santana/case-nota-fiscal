@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Robot Framework ###
+robot/.venv/
+robot/results/

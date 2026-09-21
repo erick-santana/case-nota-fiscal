@@ -1,0 +1,332 @@
+{
+  "id_pedido": 1,
+  "data": "2022-05-01",
+  "valor_total_itens": 500,
+  "valor_frete": 10.0,
+  "itens": [
+    {
+      "id_item": 1,
+      "descricao": "Item 1",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 2,
+      "descricao": "Item 2",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 3,
+      "descricao": "Item 3",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 4,
+      "descricao": "Item 4",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 5,
+      "descricao": "Item 5",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 6,
+      "descricao": "Item 6",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 7,
+      "descricao": "Item 7",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 8,
+      "descricao": "Item 8",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 9,
+      "descricao": "Item 9",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 10,
+      "descricao": "Item 10",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 11,
+      "descricao": "Item 11",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 12,
+      "descricao": "Item 12",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 13,
+      "descricao": "Item 13",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 14,
+      "descricao": "Item 14",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 15,
+      "descricao": "Item 15",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 16,
+      "descricao": "Item 16",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 17,
+      "descricao": "Item 17",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 18,
+      "descricao": "Item 18",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 19,
+      "descricao": "Item 19",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 20,
+      "descricao": "Item 20",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 21,
+      "descricao": "Item 21",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 22,
+      "descricao": "Item 22",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 23,
+      "descricao": "Item 23",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 24,
+      "descricao": "Item 24",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 25,
+      "descricao": "Item 25",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 26,
+      "descricao": "Item 26",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 27,
+      "descricao": "Item 27",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 28,
+      "descricao": "Item 28",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 29,
+      "descricao": "Item 29",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 30,
+      "descricao": "Item 30",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 31,
+      "descricao": "Item 31",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 32,
+      "descricao": "Item 32",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 33,
+      "descricao": "Item 33",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 34,
+      "descricao": "Item 34",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 35,
+      "descricao": "Item 35",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 36,
+      "descricao": "Item 36",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 37,
+      "descricao": "Item 37",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 38,
+      "descricao": "Item 38",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 39,
+      "descricao": "Item 39",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 40,
+      "descricao": "Item 40",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 41,
+      "descricao": "Item 41",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 42,
+      "descricao": "Item 42",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 43,
+      "descricao": "Item 43",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 44,
+      "descricao": "Item 44",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 45,
+      "descricao": "Item 45",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 46,
+      "descricao": "Item 46",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 47,
+      "descricao": "Item 47",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 48,
+      "descricao": "Item 48",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 49,
+      "descricao": "Item 49",
+      "valor_unitario": 10,
+      "quantidade": 1
+    },
+    {
+      "id_item": 50,
+      "descricao": "Item 50",
+      "valor_unitario": 10,
+      "quantidade": 1
+    }
+  ],
+  "destinatario": {
+    "nome": "John Doe",
+    "tipo_pessoa": "FISICA",
+    "documentos": [
+      {
+        "tipo": "CPF",
+        "numero": "88740347095"
+      }
+    ],
+    "enderecos": [
+      {
+        "logradouro": "Av do estado",
+        "numero": "5533",
+        "complemento": "4 anndar b",
+        "bairro": "Mooca",
+        "cidade": "São Paulo",
+        "estado": "SP",
+        "pais": "Brasil",
+        "cep": "03105003",
+        "finalidade": "ENTREGA",
+        "regiao": "SUDESTE"
+      }
+    ]
+  }
+}

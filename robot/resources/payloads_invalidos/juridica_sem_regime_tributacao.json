@@ -1,0 +1,38 @@
+{
+  "id_pedido": 1,
+  "data": "2022-05-01",
+  "valor_total_itens": 5840.0,
+  "valor_frete": 72.0,
+  "itens": [
+    {
+      "id_item": 1,
+      "descricao": "Monitor LCD SAMSUNG",
+      "valor_unitario": 730,
+      "quantidade": 8
+    }
+  ],
+  "destinatario": {
+    "nome": "John Doe",
+    "tipo_pessoa": "JURIDICA",
+    "documentos": [
+      {
+        "tipo": "CNPJ",
+        "numero": "49695613000180"
+      }
+    ],
+    "enderecos": [
+      {
+        "logradouro": "Av do estado",
+        "numero": "5533",
+        "complemento": "4 anndar b",
+        "bairro": "Mooca",
+        "cidade": "São Paulo",
+        "estado": "SP",
+        "pais": "Brasil",
+        "cep": "03105003",
+        "finalidade": "ENTREGA",
+        "regiao": "SUDESTE"
+      }
+    ]
+  }
+}
